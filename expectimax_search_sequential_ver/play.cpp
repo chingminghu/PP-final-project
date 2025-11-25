@@ -1,4 +1,6 @@
+#include "2048env.hpp"
 #include "n_tuple_TD.hpp"
+#include "expectimax_search.hpp"
 #include <iostream>
 
 int main(void)
@@ -14,24 +16,20 @@ int main(void)
         {{0, 0}, {0, 1}, {0, 2}, {1, 0}, {1, 2}, {2, 2}}
     };
     
-    // For OI approach, considering set the init_value to 160000
-    NTupleTD agent(patterns, 4, 4, 0, 0.01, 1.0);
+    NTupleTD agent(patterns);
     Env2048 env;
+    env.reset();
     
     agent.load_weights("2048_weights.pkl");
-    std::vector<int> scores = agent.train(env, 1000000, 0.1);
-    std::cout << "Training completed.\n";
+    while(true) {
+        int action = Expectimax(env.get_board(), agent, 5, 20);
 
-    // std::cout << "Save the results? (y/n): ";
-    // char choice;
-    // std::cin >> choice;
-    // if (choice == 'y' || choice == 'Y') {
-    //     agent.save_scores("2048_scores.txt", scores);
-    //     agent.save_weights("2048_weights.pkl");
-    // } 
-    // else {
-    //     std::cout << "Results not saved.\n";
-    // }
-    
-    return 0;
+        env.step(action);
+        env.print_board();
+        
+        if(env.is_game_over()) {
+            std::cout << "Game Over! The final score is: " << env.get_score() << "\n";
+            break;
+        }
+    }
 }

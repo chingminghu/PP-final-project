@@ -52,14 +52,14 @@ Feature NTupleTD::get_feature(const Board& board, const Pattern pattern) const
     return feature;
 }
 
-double NTupleTD::cal_value(const Board& board) //const
+double NTupleTD::cal_value(const Board& board) const
 {
     double value = 0;
     for(int index = 0; index < n_tuples; index++){
         const Pattern& pattern = symmetric_patterns[index];
         Feature feature = get_feature(board, pattern);
-        auto it = weights[index / 8].find(feature);
-        if (it != weights[index / 8].end())
+        auto it = weights.at(index / 8).find(feature);
+        if (it != weights.at(index / 8).end())
             value += it->second;
         else 
             value += init_value;

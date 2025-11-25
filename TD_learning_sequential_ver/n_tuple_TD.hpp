@@ -48,7 +48,6 @@ class NTupleTD
         std::vector<Pattern> generate_symmetric_patterns(const Pattern& pattern) const;
         int tile_to_index(const int tile) const;
         Feature get_feature(const Board& board, const Pattern pattern) const;
-        double cal_value(const Board& board);
         void update_weights(const Board& board, const double delta);
         double simulate_action(Env2048 env, const Board& board, const int action);
         void learn(const Experience& experience);
@@ -56,6 +55,7 @@ class NTupleTD
     public:
         NTupleTD(std::vector<Pattern>& patterns, int n_actions = 4, int board_size = 4, double init_value = 0.0, double learning_rate = 0.01, double discount_factor = 0.99);
         std::vector<int> train(Env2048& env, const int episodes = 10000, const double epsilon = 0.1);
+        double cal_value(const Board& board) const;
         int choose_action(Env2048& env, const double epsilon = 0.1);
         void save_scores(const std::string& path, const std::vector<int>& scores) const;
         void save_weights(const std::string& path) const;

@@ -22,7 +22,6 @@ class Env2048
         int n_actions;
         bool last_move_valid;
 
-        void add_random_tile();
         Row compress(const Row& row);
         Row merge(const Row& row);
         bool move_left();
@@ -37,6 +36,7 @@ class Env2048
         StepResult step(const int action);
         void print_board() const;
 
+        void add_random_tile();
         bool is_move_legal(const int action);
         std::vector<int> get_legal_actions();
         int get_size() const { return size; }

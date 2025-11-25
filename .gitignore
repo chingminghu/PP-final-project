@@ -1,2 +1,4 @@
 *.exe
 *.o
+*/2048_scores.txt
+*/2048_weights.pkl
