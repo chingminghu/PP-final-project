@@ -16,10 +16,13 @@ public:
     int cumulate_score = 0;
     int visit_count = 0;
     double total_reward = 0.0;
+    double min_avg = std::numeric_limits<double>::infinity();
+    double max_avg = -std::numeric_limits<double>::infinity();
 
     double avg_reward() const {
         return this->total_reward / this->visit_count;
     }
+    void update_reward(const double reward, double &min_avg, double &max_avg);
     virtual MCTSNode *get_parent() { return nullptr; }
 
 protected:
@@ -57,8 +60,8 @@ struct ChanceNode : public MCTSNode {
     DecisionNode *expand_child(Env2048 &env, const Board &board);
     double uct_value(const double explore_c) const {
         // std::cout << "[UCT] "<< this->avg_reward() << " <-> " << explore_c * sqrt(log(this->parent->visit_count) / this->visit_count) << std::endl;
-        return this->avg_reward() +
-            explore_c * sqrt(log(this->parent->visit_count) / this->visit_count);
+        return this->avg_reward() + (this->parent->max_avg - this->parent->min_avg) * explore_c
+                                  * sqrt(log(this->parent->visit_count) / this->visit_count);
     }
     MCTSNode *get_parent() override final;
 };
@@ -71,6 +74,19 @@ MCTSNode *DecisionNode::get_parent()
 MCTSNode *ChanceNode::get_parent()
 {
     return this->parent;
+}
+
+void MCTSNode::update_reward(const double reward, double &min_avg, double &max_avg)
+{
+    this->visit_count += 1;
+    this->total_reward += reward;
+    double avg = this->avg_reward();
+    min_avg = std::min(min_avg, avg);
+    min_avg = std::min(min_avg, this->min_avg);
+    this->min_avg = min_avg;
+    max_avg = std::max(max_avg, avg);
+    max_avg = std::max(max_avg, this->max_avg);
+    this->max_avg = max_avg;
 }
 
 ChanceNode *DecisionNode::select_child(const double explore_c)
@@ -190,25 +206,31 @@ double MCTS::rollout(DecisionNode *leaf)
 {
     this->env.set_board(leaf->board);
     this->env.set_score(0);
+    Board after_state = leaf->board;
+    bool game_over = this->env.is_game_over();
     for (int round = 0; round < this->rollout_depth; round++) {
-        if (this->env.is_game_over())
+        if (game_over)
             return leaf->cumulate_score + this->env.get_score();
         std::vector<int> legal_actions = env.get_legal_actions();
         std::uniform_int_distribution<> dis(0, legal_actions.size() - 1);
-        env.step(legal_actions[dis(this->rng)]);
+        StepResult result = env.step(legal_actions[dis(this->rng)]);
+        after_state = result.board;
+        game_over = result.game_over;
     }
-    if (this->env.is_game_over())
+    if (game_over)
         return leaf->cumulate_score + this->env.get_score();
     // std::cout << "[REWARD]" << leaf->cumulate_score + this->env.get_score() << " <-> " << this->agent.cal_value(this->env.get_board()) << std::endl;
-    return leaf->cumulate_score + this->env.get_score() + this->agent.cal_value(this->env.get_board());
+    
+    return leaf->cumulate_score + this->env.get_score() + this->agent.cal_value(after_state);
 }
 
 void MCTS::backpropagate(DecisionNode *leaf, double reward)
 {
     MCTSNode *cursor = leaf;
+    double min_avg = std::numeric_limits<double>::infinity(),
+           max_avg = -std::numeric_limits<double>::infinity();
     while (cursor != nullptr) {
-        cursor->visit_count += 1;
-        cursor->total_reward += reward;
+        cursor->update_reward(reward, min_avg, max_avg);
         cursor = cursor->get_parent();
     }
 }
