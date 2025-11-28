@@ -8,11 +8,11 @@
 #include <sstream>
 #include <string>
 
-int average_interval = 100;
-int save_interval = 1000;
+int average_interval = 1000;
+int save_interval = 10000;
 
 NTupleTD::NTupleTD(std::vector<Pattern>& patterns, int n_actions, int board_size, double init_value, double learning_rate, double discount_factor)
-    : patterns(patterns), n_actions(n_actions), board_size(board_size), init_value(init_value), learning_rate(learning_rate), discount_factor(discount_factor)
+    : patterns(patterns), n_actions(n_actions), board_size(board_size), learning_rate(learning_rate), discount_factor(discount_factor), init_value(init_value)
 {
     symmetric_patterns.reserve(patterns.size() * 8);
     for (const Pattern& pattern : this->patterns) {
@@ -100,53 +100,83 @@ void NTupleTD::learn(const Experience& experience)
     return;
 }
 
-std::vector<int> NTupleTD::train(Env2048& env, const int episodes, const double epsilon)
+int NTupleTD::run_episode(Env2048& env, double epsilon)
+{
+    Board beforestate(board_size, Row(board_size, 0)), afterstate;
+    std::vector<Experience> trajectory;
+    int prev_score = 0;
+    bool done = false;
+
+    env.reset();
+    while (!done) {
+        int action = choose_action(env, epsilon);
+        if (action == -1) break;
+
+        StepResult result = env.step(action);
+        afterstate = result.board;
+        int reward = result.score - prev_score;
+        done = result.game_over;
+
+        trajectory.push_back({beforestate, action, reward, afterstate, done});
+        prev_score = result.score;
+        beforestate = afterstate;
+    }
+
+    for (int i = static_cast<int>(trajectory.size()) - 1; i >= 0; i--) {
+        Experience& exp = trajectory[i];
+        learn(exp);
+    }
+
+    return env.get_score();
+}
+
+std::vector<int> NTupleTD::train(Env2048& env,
+                                 int episodes,
+                                 double epsilon_start,
+                                 double epsilon_end,
+                                 int decay_episodes)
 {
     std::vector<int> scores;
     scores.reserve(episodes);
 
-    try{
+    if (decay_episodes <= 0) {
+        decay_episodes = 1;
+    }
+
+    auto get_epsilon = [&](int episode) -> double {
+        if (episode >= decay_episodes) {
+            return epsilon_end;
+        }
+        double ratio = static_cast<double>(episode) /
+                       static_cast<double>(decay_episodes);
+        return epsilon_start + ratio * (epsilon_end - epsilon_start);
+    };
+
+    try {
         for (int episode = 0; episode < episodes; episode++) {
-            Board beforestate(board_size, Row(board_size, 0)), afterstate;
-            std::vector<Experience> trajectory;
-            int prev_score = 0;
-            bool done = false;
+            double epsilon = get_epsilon(episode);
 
-            env.reset();
-            while (!done){
-                int action = choose_action(env, epsilon);
-                if(action == -1)    break;
+            int score = run_episode(env, epsilon);
+            scores.push_back(score);
 
-                StepResult result = env.step(action);
-                afterstate = result.board;
-                int reward = result.score - prev_score;
-                done = result.game_over;
-
-                trajectory.push_back({beforestate, action, reward, afterstate, done});
-                prev_score = result.score;
-                beforestate = afterstate;
-            }
-
-            for(int i = trajectory.size() - 1; i >= 0; i--) {
-                Experience& exp = trajectory[i];
-                learn(exp);
-            }
-            scores.push_back(env.get_score());
             if (episode % average_interval == 0) {
-                double avg_score = std::accumulate(scores.end() - std::min(average_interval, static_cast<int>(scores.size())), scores.end(), 0.0) / std::min(average_interval, static_cast<int>(scores.size()));
-                std::cout << "Episode: " << episode << ", Average Score: " << avg_score << "\n";
+                int window = std::min(average_interval,
+                                      static_cast<int>(scores.size()));
+                double avg_score = std::accumulate(scores.end() - window,
+                                                   scores.end(), 0.0) / window;
+                std::cout << "Episode: " << episode
+                          << ", Epsilon: " << epsilon
+                          << ", Average Score: " << avg_score << std::endl;
             }
             if (episode % save_interval == 0 && episode > 0) {
-                std::cout << "Saving weights and scores at episode " << episode << "\n";
+                std::cout << "Saving weights and scores at episode "
+                          << episode << std::endl;
                 save_weights("2048_weights.pkl");
                 save_scores("2048_scores.txt", scores);
                 scores.clear();
             }
         }
     }
-    // catch (const std::) {
-    //     std::cerr << "Training interrupted: " << e.what() << "\n";
-    // }
     catch (const std::exception& e) {
         std::cerr << "Error during training: " << e.what() << "\n";
     }
@@ -178,7 +208,7 @@ void NTupleTD::save_scores(const std::string& path, const std::vector<int>& scor
         ofs << score << "\n";
     }
     ofs.close();
-    std::cout << "Scores saved to " << path << "\n";
+    std::cout << "Scores saved to " << path << std::endl;
 }
 
 void NTupleTD::save_weights(const std::string& path) const
@@ -189,7 +219,7 @@ void NTupleTD::save_weights(const std::string& path) const
         return;
     }
 
-    for(int i = 0; i < weights.size(); i++) {
+    for(int i = 0; static_cast<size_t>(i) < weights.size(); i++) {
         const WeightsMap& weight_map = weights[i];
         ofs << "Pattern " << i << ":\n";
         for(const auto& pair : weight_map) {
@@ -200,7 +230,7 @@ void NTupleTD::save_weights(const std::string& path) const
         }
     }
     ofs.close();
-    std::cout << "Weights saved to " << path << "\n";
+    std::cout << "Weights saved to " << path << std::endl;
     return;
 }
 
@@ -219,7 +249,7 @@ void NTupleTD::load_weights(const std::string& path)
         if(line.empty() || line[0] == '#') continue;
         if(line.find("Pattern") != std::string::npos) {
             pattern_index = std::stoi(line.substr(line.find(" ") + 1));
-            if(pattern_index < 0 || pattern_index >= patterns.size()) {
+            if(pattern_index < 0 || static_cast<size_t>(pattern_index) >= patterns.size()) {
                 std::cerr << "Invalid pattern index in weights file: " << pattern_index << "\n";
                 continue;
             }
@@ -243,8 +273,17 @@ void NTupleTD::load_weights(const std::string& path)
         }
     }
     ifs.close();
-    std::cout << "Weights loaded from " << path << "\n";
+    std::cout << "Weights loaded from " << path << std::endl;
     return;
+}
+const std::vector<WeightsMap>& NTupleTD::get_weights() const
+{
+    return weights;
+}
+
+void NTupleTD::set_weights(const std::vector<WeightsMap>& new_weights)
+{
+    weights = new_weights;
 }
 
 Pattern pattern_rot90(const Pattern& pattern, const int board_size)
