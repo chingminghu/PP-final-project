@@ -1,7 +1,9 @@
 #include "2048env.hpp"
 #include <iostream>
+#include <ctime>
 
 int main(void){
+    srand(static_cast<unsigned int>(time(nullptr)));
     Env2048 env;
     env.reset();
     std::cout << "Welcome to 2048!\n";

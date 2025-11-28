@@ -6,8 +6,6 @@
 
 Env2048::Env2048(const int size)
 {
-    srand(static_cast<unsigned int>(time(nullptr)));
-    
     this->size = size;
     this->n_actions = 4;
     this->last_move_valid = true;
@@ -50,7 +48,7 @@ Row Env2048::compress(const Row& row)
             new_row.push_back(row[i]);
         }
     }
-    while(new_row.size() < size) {
+    while(new_row.size() < static_cast<size_t>(size)) {
         new_row.push_back(0);
     }
     return new_row;

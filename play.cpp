@@ -1,6 +1,7 @@
 #include "2048env.hpp"
 #include "n_tuple_TD.hpp"
 #include <iostream>
+#include <ctime>
 
 int main(void)
 {
@@ -15,11 +16,12 @@ int main(void)
         {{0, 0}, {0, 1}, {0, 2}, {1, 0}, {1, 2}, {2, 2}}
     };
     
+    srand(static_cast<unsigned int>(time(nullptr)));
     NTupleTD agent(patterns);
     Env2048 env;
     env.reset();
     
-    agent.load_weights("2048_weights.pkl");
+    agent.load_weights("2048_weights_mpi.pkl");
     while(true) {
         int action = agent.choose_action(env, 0);
 
