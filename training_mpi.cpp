@@ -4,69 +4,121 @@
 #include <iostream>
 #include <vector>
 #include <numeric>
+#include <algorithm>
 #include <unordered_map>
-#include <sstream>
-#include <iomanip>
 #include <cstdlib>
 #include <ctime>
+#include <cstring>
 
 using SumCountMap = std::unordered_map<Feature, std::pair<double, int>>;
+using Byte        = unsigned char;
 
-std::string serialize_weights(const std::vector<WeightsMap>& weights)
+double g_mpi_average_time_local = 0.0;
+
+static void pack_int(std::vector<Byte>& buf, int value)
 {
-    std::ostringstream oss;
-    oss << std::setprecision(17);
+    Byte bytes[sizeof(int)];
+    std::memcpy(bytes, &value, sizeof(int));
+    buf.insert(buf.end(), bytes, bytes + sizeof(int));
+}
+
+static void pack_double(std::vector<Byte>& buf, double value)
+{
+    Byte bytes[sizeof(double)];
+    std::memcpy(bytes, &value, sizeof(double));
+    buf.insert(buf.end(), bytes, bytes + sizeof(double));
+}
+
+static bool can_read(size_t offset, size_t need, size_t len)
+{
+    return offset + need <= len;
+}
+
+static int unpack_int(const Byte* data, size_t& offset, size_t len)
+{
+    int value = 0;
+    if (!can_read(offset, sizeof(int), len)) {
+        return 0;
+    }
+    std::memcpy(&value, data + offset, sizeof(int));
+    offset += sizeof(int);
+    return value;
+}
+
+static double unpack_double(const Byte* data, size_t& offset, size_t len)
+{
+    double value = 0.0;
+    if (!can_read(offset, sizeof(double), len)) {
+        return 0.0;
+    }
+    std::memcpy(&value, data + offset, sizeof(double));
+    offset += sizeof(double);
+    return value;
+}
+
+static std::vector<Byte> serialize_weights_binary(
+    const std::vector<WeightsMap>& weights)
+{
+    std::vector<Byte> buf;
 
     for (size_t p = 0; p < weights.size(); ++p) {
         const WeightsMap& wm = weights[p];
         for (const auto& kv : wm) {
             const Feature& feat = kv.first;
-            double w = kv.second;
+            double w            = kv.second;
 
-            oss << p << ' ' << feat.size();
+            pack_int(buf, static_cast<int>(p));
+            pack_int(buf, static_cast<int>(feat.size()));
             for (int v : feat) {
-                oss << ' ' << v;
+                pack_int(buf, v);
             }
-            oss << ' ' << w << '\n';
+            pack_double(buf, w);
         }
     }
-    return oss.str();
+    return buf;
 }
 
-void deserialize_weights(const std::string& data,
-                         std::vector<WeightsMap>& weights,
-                         size_t num_patterns)
+static void deserialize_weights_binary(
+    const Byte* data,
+    size_t len,
+    size_t num_patterns,
+    std::vector<WeightsMap>& weights)
 {
     weights.clear();
     weights.resize(num_patterns);
 
-    std::istringstream iss(data);
-    size_t p_idx;
-    size_t feat_len;
+    size_t offset = 0;
+    while (can_read(offset, 2 * sizeof(int), len)) {
+        int p_idx    = unpack_int(data, offset, len);
+        int feat_len = unpack_int(data, offset, len);
 
-    while (iss >> p_idx >> feat_len) {
-        if (p_idx >= num_patterns) {
-            std::string dummy;
-            std::getline(iss, dummy);
-            continue;
+        if (feat_len < 0) {
+            break;
+        }
+
+        size_t need = static_cast<size_t>(feat_len) * sizeof(int) + sizeof(double);
+        if (!can_read(offset, need, len)) {
+            break;
         }
 
         Feature feat;
-        feat.reserve(feat_len);
-        for (size_t i = 0; i < feat_len; ++i) {
-            int v;
-            iss >> v;
+        feat.reserve(static_cast<size_t>(feat_len));
+        for (int i = 0; i < feat_len; ++i) {
+            int v = unpack_int(data, offset, len);
             feat.push_back(v);
         }
+        double w = unpack_double(data, offset, len);
 
-        double w;
-        iss >> w;
-        weights[p_idx][feat] = w;
+        if (p_idx < 0 || static_cast<size_t>(p_idx) >= num_patterns) {
+            continue;
+        }
+        weights[static_cast<size_t>(p_idx)][std::move(feat)] = w;
     }
 }
 
 void mpi_average_weights(NTupleTD& agent, MPI_Comm comm)
 {
+    double t0 = MPI_Wtime();
     int rank, world_size;
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &world_size);
@@ -78,80 +130,99 @@ void mpi_average_weights(NTupleTD& agent, MPI_Comm comm)
         return;
     }
 
-    if (rank == 0) {
-        std::vector<SumCountMap> accum(num_patterns);
-        auto accumulate_from = [&](const std::vector<WeightsMap>& src) {
-            for (size_t p = 0; p < num_patterns; ++p) {
-                const WeightsMap& wm = src[p];
-                SumCountMap& ac = accum[p];
-                for (const auto& kv : wm) {
-                    const Feature& feat = kv.first;
-                    double w = kv.second;
-                    auto& entry = ac[feat];
-                    entry.first  += w;
-                    entry.second += 1;
-                }
-            }
-        };
+    std::vector<Byte> local_buf = serialize_weights_binary(local_weights);
+    int local_size = static_cast<int>(local_buf.size());
 
-        accumulate_from(local_weights);
+    std::vector<int> all_sizes(world_size);
+    MPI_Allgather(&local_size, 1, MPI_INT,
+                  all_sizes.data(), 1, MPI_INT,
+                  comm);
 
-        for (int r = 1; r < world_size; ++r) {
-            int len = 0;
-            MPI_Recv(&len, 1, MPI_INT, r, 0, comm, MPI_STATUS_IGNORE);
-            if (len <= 0) continue;
-
-            std::string buf(len, '\0');
-            MPI_Recv(buf.data(), len, MPI_CHAR, r, 1, comm, MPI_STATUS_IGNORE);
-
-            std::vector<WeightsMap> tmp;
-            deserialize_weights(buf, tmp, num_patterns);
-            accumulate_from(tmp);
-        }
-
-        std::vector<WeightsMap> averaged(num_patterns);
-        for (size_t p = 0; p < num_patterns; ++p) {
-            WeightsMap& dst = averaged[p];
-            for (const auto& kv : accum[p]) {
-                const Feature& feat = kv.first;
-                double sum = kv.second.first;
-                int cnt   = kv.second.second;
-                dst[feat] = sum / static_cast<double>(cnt);
-            }
-        }
-
-        std::string out = serialize_weights(averaged);
-        int out_len = static_cast<int>(out.size());
-        MPI_Bcast(&out_len, 1, MPI_INT, 0, comm);
-        if (out_len > 0) {
-            MPI_Bcast(out.data(), out_len, MPI_CHAR, 0, comm);
-        }
-
-        agent.set_weights(averaged);
-    } else {
-        std::string data = serialize_weights(local_weights);
-        int len = static_cast<int>(data.size());
-        MPI_Send(&len, 1, MPI_INT, 0, 0, comm);
-        if (len > 0) {
-            MPI_Send(data.data(), len, MPI_CHAR, 0, 1, comm);
-        }
-
-        int out_len = 0;
-        MPI_Bcast(&out_len, 1, MPI_INT, 0, comm);
-
-        std::vector<WeightsMap> averaged;
-        if (out_len > 0) {
-            std::string buf(out_len, '\0');
-            MPI_Bcast(buf.data(), out_len, MPI_CHAR, 0, comm);
-            deserialize_weights(buf, averaged, num_patterns);
-        } else {
-            averaged = local_weights;
-        }
-
-        agent.set_weights(averaged);
+    std::vector<int> displs(world_size);
+    int total_size = 0;
+    for (int i = 0; i < world_size; ++i) {
+        displs[i] = total_size;
+        total_size += all_sizes[i];
     }
 
+    std::vector<Byte> all_buf(static_cast<size_t>(total_size));
+    MPI_Allgatherv(local_buf.data(), local_size, MPI_UNSIGNED_CHAR,
+                   all_buf.data(), all_sizes.data(), displs.data(),
+                   MPI_UNSIGNED_CHAR, comm);
+
+    std::vector<SumCountMap> accum(num_patterns);
+
+    for (int r = 0; r < world_size; ++r) {
+        int sz = all_sizes[r];
+        if (sz <= 0) continue;
+
+        size_t start = static_cast<size_t>(displs[r]);
+        size_t len   = static_cast<size_t>(sz);
+
+        std::vector<WeightsMap> tmp;
+        deserialize_weights_binary(all_buf.data() + start, len,
+                                   num_patterns, tmp);
+
+        for (size_t p = 0; p < num_patterns; ++p) {
+            const WeightsMap& wm = tmp[p];
+            SumCountMap& ac      = accum[p];
+            for (const auto& kv : wm) {
+                const Feature& feat = kv.first;
+                double w            = kv.second;
+                auto& entry = ac[feat];
+                entry.first  += w;
+                entry.second += 1;
+            }
+        }
+    }
+
+    std::vector<WeightsMap> averaged(num_patterns);
+    for (size_t p = 0; p < num_patterns; ++p) {
+        WeightsMap& dst = averaged[p];
+        for (const auto& kv : accum[p]) {
+            const Feature& feat = kv.first;
+            double sum          = kv.second.first;
+            int cnt             = kv.second.second;
+            dst[feat] = sum / static_cast<double>(cnt);
+        }
+    }
+
+    agent.set_weights(averaged);
+
     MPI_Barrier(comm);
+    double t1 = MPI_Wtime();
+    g_mpi_average_time_local += (t1 - t0);
+}
+
+double mpi_evaluate_agent(NTupleTD& agent,
+                          int eval_episodes_per_proc,
+                          double epsilon_eval,
+                          MPI_Comm comm)
+{
+    int rank, world_size;
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &world_size);
+
+    Env2048 eval_env;
+    double local_sum = 0.0;
+
+    for (int i = 0; i < eval_episodes_per_proc; ++i) {
+        int score = agent.run_episode(eval_env, epsilon_eval);
+        local_sum += static_cast<double>(score);
+    }
+
+    double global_sum = 0.0;
+    MPI_Reduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, 0, comm);
+
+    int total_episodes = eval_episodes_per_proc * world_size;
+    double avg_score = 0.0;
+    if (rank == 0 && total_episodes > 0) {
+        avg_score = global_sum / static_cast<double>(total_episodes);
+    }
+
+    MPI_Bcast(&avg_score, 1, MPI_DOUBLE, 0, comm);
+
+    return avg_score;
 }
 
 int main(int argc, char** argv)
@@ -178,26 +249,30 @@ int main(int argc, char** argv)
     NTupleTD agent(patterns, 4, 4, 160000, 0.01, 1.0);
     Env2048 env;
 
-    int episodes_per_proc = 25000;
+    int train_episodes_per_proc = 25000;
     if (argc >= 2) {
-        episodes_per_proc = std::atoi(argv[1]);
+        train_episodes_per_proc = std::atoi(argv[1]);
     }
 
-    int sync_interval = 3000;
+    int sync_interval = 1000;
     if (argc >= 3) {
         sync_interval = std::atoi(argv[2]);
     }
 
     double epsilon_start = 1.0;
     double epsilon_end   = 0.05;
-    int decay_episodes   = 16000;
+    int decay_episodes   = 20000;
     if (argc >= 4) {
         decay_episodes = std::atoi(argv[3]);
     }
 
+    int eval_episodes_per_proc = 100;
+    if (argc >= 5) {
+        eval_episodes_per_proc = std::atoi(argv[4]);
+    }
+
     const int log_interval = 1000;
-    std::vector<int> local_scores;
-    local_scores.reserve(episodes_per_proc);
+    double train_start = MPI_Wtime();
 
     auto get_epsilon = [&](int episode) -> double {
         if (episode >= decay_episodes) {
@@ -208,41 +283,51 @@ int main(int argc, char** argv)
         return epsilon_start + ratio * (epsilon_end - epsilon_start);
     };
 
-    for (int ep = 0; ep < episodes_per_proc; ++ep) {
+    for (int ep = 0; ep < train_episodes_per_proc; ++ep) {
         double eps = get_epsilon(ep);
-        int score = agent.run_episode(env, eps);
-        local_scores.push_back(score);
+        agent.run_episode(env, eps);
+
+        if ((ep + 1) % sync_interval == 0 || ep == train_episodes_per_proc - 1) {
+            mpi_average_weights(agent, MPI_COMM_WORLD);
+        }
 
         if ((ep + 1) % log_interval == 0) {
-            int window = std::min(log_interval,
-                                  static_cast<int>(local_scores.size()));
-            double local_sum = 0.0;
-            for (int i = static_cast<int>(local_scores.size()) - window;
-                 i < static_cast<int>(local_scores.size());
-                 ++i) {
-                local_sum += local_scores[i];
-            }
-            double local_avg = local_sum / window;
+            double elapsed = MPI_Wtime() - train_start;
 
-            double global_avg_sum = 0.0;
-            MPI_Reduce(&local_avg, &global_avg_sum, 1,
-                       MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+            double eval_avg = mpi_evaluate_agent(
+                agent,
+                eval_episodes_per_proc,
+                0.0,
+                MPI_COMM_WORLD
+            );
+
+            int local_episodes  = ep + 1;
 
             if (rank == 0) {
-                double global_avg = global_avg_sum / world_size;
-                std::cout << "[MPI] Episode (per proc): " << (ep + 1)
-                          << ", epsilon: " << eps
-                          << ", global avg score: " << global_avg
+                std::cout << "[LOG] time=" << elapsed
+                          << "s, world_size=" << world_size
+                          << ", ep_per_proc=" << local_episodes
+                          << ", epsilon=" << eps
+                          << ", eval_avg_score=" << eval_avg
                           << std::endl;
             }
         }
-
-        if ((ep + 1) % sync_interval == 0) {
-            mpi_average_weights(agent, MPI_COMM_WORLD);
-        }
     }
 
-    mpi_average_weights(agent, MPI_COMM_WORLD);
+    double total_time = 0.0;
+    double max_time   = 0.0;
+    MPI_Reduce(&g_mpi_average_time_local, &total_time, 1,
+               MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&g_mpi_average_time_local, &max_time, 1,
+               MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        double avg_time_per_rank = total_time / world_size;
+        std::cout << "[PROFILE] mpi_average_weights total time per rank (sum): "
+                  << total_time << " s, avg per rank: " << avg_time_per_rank
+                  << " s, max rank time: " << max_time << " s"
+                  << std::endl;
+    }
 
     if (rank == 0) {
         agent.save_weights("2048_weights_mpi.pkl");

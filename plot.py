@@ -1,11 +1,37 @@
+import re
 import matplotlib.pyplot as plt
 
-if __name__ == "__main__":
-    with open("2048_scores.txt", "r") as file:
-        scores = [int(line.strip()) for line in file.readlines()]
-    plt.plot(scores, marker='o', linestyle='-', color='b')
-    plt.title("2048 Game Scores Over Time")
-    plt.xlabel("Game Number")
-    plt.ylabel("Score")
-    plt.grid(True)
-    plt.show()
+line_re = re.compile(
+    r"time=([\d\.]+)s.*eval_avg_score=([\d\.]+)"
+)
+
+def load_curve(path):
+    xs, ys = [], []
+    with open(path, 'r') as f:
+        for line in f:
+            m = line_re.search(line)
+            if not m:
+                continue
+            t = float(m.group(1))
+            score = float(m.group(2))
+            xs.append(t)
+            ys.append(score)
+    return xs, ys
+
+logs = {
+    "1 proc": "log_np1.txt",
+    "4 procs": "log_np4.txt",
+    "8 procs": "log_np8.txt",
+}
+
+for label, fname in logs.items():
+    t, s = load_curve(fname)
+    plt.plot(t, s, label=label)
+
+plt.xlabel("Wall-clock time (s)")
+plt.ylabel("Global avg score (last 1000 eps)")
+plt.title("TD-learning 2048: training speed vs #MPI processes")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
