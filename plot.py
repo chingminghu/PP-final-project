@@ -19,9 +19,8 @@ def load_curve(path):
     return xs, ys
 
 logs = {
-    "1 proc": "log_np1.txt",
-    "4 procs": "log_np4.txt",
-    "8 procs": "log_np8.txt",
+    "1 proc": "log_1.txt",
+    "4 proc": "log_4.txt",
 }
 
 for label, fname in logs.items():
@@ -29,7 +28,7 @@ for label, fname in logs.items():
     plt.plot(t, s, label=label)
 
 plt.xlabel("Wall-clock time (s)")
-plt.ylabel("Global avg score (last 1000 eps)")
+plt.ylabel("Global avg score")
 plt.title("TD-learning 2048: training speed vs #MPI processes")
 plt.legend()
 plt.grid(True)

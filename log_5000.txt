@@ -1,0 +1,43 @@
+[LOG] time=11.5993s, world_size=4, ep_per_proc=2500, epsilon=0.973622, eval_avg_score=2049.89
+[LOG] time=30.2074s, world_size=4, ep_per_proc=5000, epsilon=0.947233, eval_avg_score=2559.97
+[LOG] time=46.2878s, world_size=4, ep_per_proc=7500, epsilon=0.920844, eval_avg_score=2453.35
+[LOG] time=68.187s, world_size=4, ep_per_proc=10000, epsilon=0.894455, eval_avg_score=3030.58
+[LOG] time=88.0223s, world_size=4, ep_per_proc=12500, epsilon=0.868066, eval_avg_score=2744.23
+[LOG] time=113.672s, world_size=4, ep_per_proc=15000, epsilon=0.841677, eval_avg_score=3139.19
+[LOG] time=136.982s, world_size=4, ep_per_proc=17500, epsilon=0.815288, eval_avg_score=3256.48
+[LOG] time=167.849s, world_size=4, ep_per_proc=20000, epsilon=0.788899, eval_avg_score=3450.16
+[LOG] time=194.979s, world_size=4, ep_per_proc=22500, epsilon=0.762511, eval_avg_score=3272.94
+[LOG] time=230.782s, world_size=4, ep_per_proc=25000, epsilon=0.736122, eval_avg_score=3745.07
+[LOG] time=262.502s, world_size=4, ep_per_proc=27500, epsilon=0.709733, eval_avg_score=3532.42
+[LOG] time=302.376s, world_size=4, ep_per_proc=30000, epsilon=0.683344, eval_avg_score=4042.68
+[LOG] time=338.518s, world_size=4, ep_per_proc=32500, epsilon=0.656955, eval_avg_score=3863.43
+[LOG] time=384.51s, world_size=4, ep_per_proc=35000, epsilon=0.630566, eval_avg_score=4130.78
+[LOG] time=426.801s, world_size=4, ep_per_proc=37500, epsilon=0.604177, eval_avg_score=3969.93
+[LOG] time=479.018s, world_size=4, ep_per_proc=40000, epsilon=0.577788, eval_avg_score=4444.27
+[LOG] time=527.401s, world_size=4, ep_per_proc=42500, epsilon=0.551399, eval_avg_score=4287.7
+[LOG] time=586.569s, world_size=4, ep_per_proc=45000, epsilon=0.525011, eval_avg_score=4573.08
+[LOG] time=645.224s, world_size=4, ep_per_proc=47500, epsilon=0.498622, eval_avg_score=4564.46
+[LOG] time=714.027s, world_size=4, ep_per_proc=50000, epsilon=0.472233, eval_avg_score=4771.08
+[LOG] time=765.453s, world_size=4, ep_per_proc=52500, epsilon=0.445844, eval_avg_score=4704.55
+[LOG] time=828.317s, world_size=4, ep_per_proc=55000, epsilon=0.419455, eval_avg_score=5143.8
+[LOG] time=888.495s, world_size=4, ep_per_proc=57500, epsilon=0.393066, eval_avg_score=4973.5
+[LOG] time=960.871s, world_size=4, ep_per_proc=60000, epsilon=0.366677, eval_avg_score=5699.89
+[LOG] time=1033.07s, world_size=4, ep_per_proc=62500, epsilon=0.340288, eval_avg_score=5400.37
+[LOG] time=1116.15s, world_size=4, ep_per_proc=65000, epsilon=0.313899, eval_avg_score=5928.23
+[LOG] time=1198.2s, world_size=4, ep_per_proc=67500, epsilon=0.287511, eval_avg_score=5722.25
+[LOG] time=1294.15s, world_size=4, ep_per_proc=70000, epsilon=0.261122, eval_avg_score=6528.55
+[LOG] time=1390.18s, world_size=4, ep_per_proc=72500, epsilon=0.234733, eval_avg_score=5945.91
+[LOG] time=1501.26s, world_size=4, ep_per_proc=75000, epsilon=0.208344, eval_avg_score=6701.73
+[LOG] time=1614.55s, world_size=4, ep_per_proc=77500, epsilon=0.181955, eval_avg_score=6567.16
+[LOG] time=1744.84s, world_size=4, ep_per_proc=80000, epsilon=0.155566, eval_avg_score=7296.31
+[LOG] time=1881.54s, world_size=4, ep_per_proc=82500, epsilon=0.129177, eval_avg_score=6981.49
+[LOG] time=2037.11s, world_size=4, ep_per_proc=85000, epsilon=0.102788, eval_avg_score=8370.23
+[LOG] time=2202.19s, world_size=4, ep_per_proc=87500, epsilon=0.0763994, eval_avg_score=8398.26
+[LOG] time=2391.68s, world_size=4, ep_per_proc=90000, epsilon=0.0500106, eval_avg_score=9420.01
+[LOG] time=2591.2s, world_size=4, ep_per_proc=92500, epsilon=0.05, eval_avg_score=9012.53
+[LOG] time=2806.38s, world_size=4, ep_per_proc=95000, epsilon=0.05, eval_avg_score=10216.4
+[LOG] time=3020.62s, world_size=4, ep_per_proc=97500, epsilon=0.05, eval_avg_score=9661.44
+[LOG] time=3251.31s, world_size=4, ep_per_proc=100000, epsilon=0.05, eval_avg_score=10555.3
+[PROFILE] mpi_average_weights total time per rank (sum): 913.672 s, avg per rank: 228.418 s, max rank time: 270.436 s
+Weights saved to 2048_weights_mpi.pkl
+MPI training finished. Weights saved to 2048_weights_mpi.pkl

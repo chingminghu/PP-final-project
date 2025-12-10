@@ -1,0 +1,28 @@
+[LOG] time=6.97743s, world_size=4, ep_per_proc=1000, epsilon=0.95782, eval_avg_score=2438.39
+[LOG] time=18.6822s, world_size=4, ep_per_proc=2000, epsilon=0.915598, eval_avg_score=2697.61
+[LOG] time=32.9709s, world_size=4, ep_per_proc=3000, epsilon=0.873376, eval_avg_score=2879.02
+[LOG] time=46.9298s, world_size=4, ep_per_proc=4000, epsilon=0.831153, eval_avg_score=3006.12
+[LOG] time=62.1387s, world_size=4, ep_per_proc=5000, epsilon=0.788931, eval_avg_score=3270.45
+[LOG] time=79.4085s, world_size=4, ep_per_proc=6000, epsilon=0.746709, eval_avg_score=3297.46
+[LOG] time=98.1195s, world_size=4, ep_per_proc=7000, epsilon=0.704487, eval_avg_score=3545.53
+[LOG] time=119.057s, world_size=4, ep_per_proc=8000, epsilon=0.662264, eval_avg_score=3770.62
+[LOG] time=141.592s, world_size=4, ep_per_proc=9000, epsilon=0.620042, eval_avg_score=3940.15
+[LOG] time=166.719s, world_size=4, ep_per_proc=10000, epsilon=0.57782, eval_avg_score=4038.13
+[LOG] time=193.744s, world_size=4, ep_per_proc=11000, epsilon=0.535598, eval_avg_score=4136.59
+[LOG] time=223.898s, world_size=4, ep_per_proc=12000, epsilon=0.493376, eval_avg_score=4472.18
+[LOG] time=257.051s, world_size=4, ep_per_proc=13000, epsilon=0.451153, eval_avg_score=4667.38
+[LOG] time=292.982s, world_size=4, ep_per_proc=14000, epsilon=0.408931, eval_avg_score=4758.47
+[LOG] time=331.934s, world_size=4, ep_per_proc=15000, epsilon=0.366709, eval_avg_score=5051.52
+[LOG] time=376.375s, world_size=4, ep_per_proc=16000, epsilon=0.324487, eval_avg_score=5285.3
+[LOG] time=424.333s, world_size=4, ep_per_proc=17000, epsilon=0.282264, eval_avg_score=5621.91
+[LOG] time=477.018s, world_size=4, ep_per_proc=18000, epsilon=0.240042, eval_avg_score=5847.41
+[LOG] time=533.801s, world_size=4, ep_per_proc=19000, epsilon=0.19782, eval_avg_score=6191.14
+[LOG] time=596.944s, world_size=4, ep_per_proc=20000, epsilon=0.155598, eval_avg_score=6635.95
+[LOG] time=667.184s, world_size=4, ep_per_proc=21000, epsilon=0.113376, eval_avg_score=6885.23
+[LOG] time=744.549s, world_size=4, ep_per_proc=22000, epsilon=0.0711533, eval_avg_score=7394.17
+[LOG] time=829.607s, world_size=4, ep_per_proc=23000, epsilon=0.05, eval_avg_score=8073.34
+[LOG] time=922.674s, world_size=4, ep_per_proc=24000, epsilon=0.05, eval_avg_score=8333.24
+[LOG] time=1019.23s, world_size=4, ep_per_proc=25000, epsilon=0.05, eval_avg_score=8509.77
+[PROFILE] mpi_average_weights total time per rank (sum): 815.27 s, avg per rank: 203.817 s, max rank time: 208.696 s
+Weights saved to 2048_weights_mpi.pkl
+MPI training finished. Weights saved to 2048_weights_mpi.pkl

@@ -249,19 +249,19 @@ int main(int argc, char** argv)
     NTupleTD agent(patterns, 4, 4, 160000, 0.01, 1.0);
     Env2048 env;
 
-    int train_episodes_per_proc = 25000;
+    int train_episodes_per_proc = 100000;
     if (argc >= 2) {
         train_episodes_per_proc = std::atoi(argv[1]);
     }
 
-    int sync_interval = 1000;
+    int sync_interval = 4000;
     if (argc >= 3) {
         sync_interval = std::atoi(argv[2]);
     }
 
     double epsilon_start = 1.0;
     double epsilon_end   = 0.05;
-    int decay_episodes   = 20000;
+    int decay_episodes   = 90000;
     if (argc >= 4) {
         decay_episodes = std::atoi(argv[3]);
     }
