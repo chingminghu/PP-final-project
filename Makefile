@@ -1,7 +1,7 @@
 CXX      := mpicxx
-CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -pedantic -Wno-cast-function-type
+CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -pedantic -Wno-cast-function-type -fopenmp
 
-TARGETS := human_play train_2048 ai_play_2048 train_2048_mpi eval_2048
+TARGETS := human_play train_2048 ai_play_2048 train_2048_mpi train_2048_openmp eval_2048
 
 COMMON_SRCS := 2048env.cpp
 COMMON_OBJS := $(COMMON_SRCS:.cpp=.o)
@@ -21,6 +21,9 @@ ai_play_2048: play.o $(COMMON_OBJS) $(AGENT_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 train_2048_mpi: training_mpi.o $(COMMON_OBJS) $(AGENT_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+train_2048_openmp: training_openmp.o $(COMMON_OBJS) $(AGENT_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 eval_2048: eval_2048.o $(COMMON_OBJS) $(AGENT_OBJS)

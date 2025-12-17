@@ -1,0 +1,29 @@
+{
+  "log": [
+    {"episode": 1000, "epsilon": 0.050000, "global_avg": 2342.295333, "time_sec": 39.855527},
+    {"episode": 2000, "epsilon": 0.050000, "global_avg": 3215.219333, "time_sec": 91.709968},
+    {"episode": 3000, "epsilon": 0.050000, "global_avg": 3620.626000, "time_sec": 152.735562},
+    {"episode": 4000, "epsilon": 0.050000, "global_avg": 3897.338000, "time_sec": 218.847528},
+    {"episode": 5000, "epsilon": 0.050000, "global_avg": 4095.292667, "time_sec": 288.393597},
+    {"episode": 6000, "epsilon": 0.050000, "global_avg": 5825.196667, "time_sec": 391.782723},
+    {"episode": 7000, "epsilon": 0.050000, "global_avg": 5547.244667, "time_sec": 481.029727},
+    {"episode": 8000, "epsilon": 0.050000, "global_avg": 5438.780000, "time_sec": 560.158039},
+    {"episode": 9000, "epsilon": 0.050000, "global_avg": 5296.093333, "time_sec": 643.813441},
+    {"episode": 10000, "epsilon": 0.050000, "global_avg": 5269.978000, "time_sec": 720.515538},
+    {"episode": 11000, "epsilon": 0.050000, "global_avg": 6601.004000, "time_sec": 843.006678},
+    {"episode": 12000, "epsilon": 0.050000, "global_avg": 6312.986667, "time_sec": 942.369573},
+    {"episode": 13000, "epsilon": 0.050000, "global_avg": 6078.504667, "time_sec": 1039.607275},
+    {"episode": 14000, "epsilon": 0.050000, "global_avg": 5847.592667, "time_sec": 1128.138296},
+    {"episode": 15000, "epsilon": 0.050000, "global_avg": 5763.765333, "time_sec": 1223.341814},
+    {"episode": 16000, "epsilon": 0.050000, "global_avg": 7008.578000, "time_sec": 1341.311828},
+    {"episode": 17000, "epsilon": 0.050000, "global_avg": 6636.494667, "time_sec": 1441.392792},
+    {"episode": 18000, "epsilon": 0.050000, "global_avg": 6417.212667, "time_sec": 1539.645900},
+    {"episode": 19000, "epsilon": 0.050000, "global_avg": 6227.706000, "time_sec": 1653.246944},
+    {"episode": 20000, "epsilon": 0.050000, "global_avg": 6112.695333, "time_sec": 1763.092315},
+    {"episode": 21000, "epsilon": 0.050000, "global_avg": 7199.117333, "time_sec": 1886.446514},
+    {"episode": 22000, "epsilon": 0.050000, "global_avg": 6914.218000, "time_sec": 1989.986881},
+    {"episode": 23000, "epsilon": 0.050000, "global_avg": 6637.486667, "time_sec": 2091.415103},
+    {"episode": 24000, "epsilon": 0.050000, "global_avg": 6410.284667, "time_sec": 2195.710258},
+    {"episode": 25000, "epsilon": 0.050000, "global_avg": 6334.457333, "time_sec": 2293.618961}
+  ]
+}
