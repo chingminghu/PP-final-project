@@ -22,7 +22,7 @@ int main()
     env.reset();
     bool done = false;
     while (!done) {
-        const int action = mcts_action(env.get_board(), agent, 1, 1.41, 2000, 5);
+        const int action = mcts_action(env.get_board(), agent, 8, 1.41, 2000, 5);
         // const int action = agent.choose_action(env, 0);
         env.step(action);
         env.print_board();

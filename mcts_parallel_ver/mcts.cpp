@@ -13,7 +13,11 @@
 #include "../env/2048env.hpp"
 #include "../TD_learning_sequential_ver/n_tuple_TD.hpp"
 
-#define DEBUG
+// TODO (1) Why fully expanded?
+//      (2) Why cur_reserve not match?
+
+// #define DEBUG
+// #define DEBUG2
 
 #define TID (std::hash<std::thread::id>{}(std::this_thread::get_id()) % 1000)
 
@@ -42,7 +46,6 @@ private:
 
 public:
     ThreadPool(MCTS &mcts, const unsigned int num_threads);
-    ~ThreadPool();
     void enqueue(std::shared_ptr<Task> task);
     void stop_all();
 };
@@ -107,13 +110,19 @@ void Stats::update_reward(const double reward, double &min_avg, double &max_avg)
     this->max_avg = max_avg;
 }
 
+#ifdef DEBUG2
+std::atomic<int> GLOBAL_ID = 0;
+#endif
+
 struct MCTSNode {
 public:
     Board board;
     Stats stats;
     FutureProp fprop;
 
-    std::atomic<bool> non_entered = true;
+#ifdef DEBUG2
+    int id;
+#endif
 
     virtual MCTSNode *get_parent() { return nullptr; }
     virtual bool fully_expanded_future() { return false; }
@@ -124,6 +133,10 @@ protected:
              const bool future, const bool working, const int max_reserve)
         : stats(cumulate_score), fprop(future, working, max_reserve) {
         this->board = board;
+#ifdef DEBUG2
+        this->id = GLOBAL_ID.fetch_add(1);
+        std::cerr << "[ID] " << this->id  << " created" << std::endl;
+#endif
     }
 };
 
@@ -142,17 +155,6 @@ struct DecisionNode : public MCTSNode {
     bool all_child_non_future() override final;
 };
 
-DecisionNode::DecisionNode(Env2048 &env, ChanceNode *parent, const Board &board,
-                           const int cumulate_score, const bool future, const bool working)
-    : MCTSNode(board, cumulate_score, future, working, 0), parent(parent)
-{
-    env.set_board(this->board);
-    this->untried_actions = env.get_legal_actions();
-    this->game_over = this->untried_actions.empty();
-    // TODO Tune max reserve, decrease as deeper in tree
-    this->fprop.max_reserve = this->untried_actions.size();
-}
-
 struct ChanceNode : public MCTSNode {
     int action;
     int max_children = 0;
@@ -170,6 +172,21 @@ struct ChanceNode : public MCTSNode {
     bool all_child_non_future() override final;
 };
 
+DecisionNode::DecisionNode(Env2048 &env, ChanceNode *parent, const Board &board,
+                           const int cumulate_score, const bool future, const bool working)
+    : MCTSNode(board, cumulate_score, future, working, 0), parent(parent)
+{
+    env.set_board(this->board);
+    this->untried_actions = env.get_legal_actions();
+    this->game_over = this->untried_actions.empty();
+    // TODO Tune max reserve, decrease as deeper in tree
+    this->fprop.max_reserve = this->untried_actions.size();
+#ifdef DEBUG2
+    if (this->parent != nullptr)
+        std::cerr << "[ID] " << this->id  << " parent " << this->parent->id << std::endl;
+#endif
+}
+
 ChanceNode::ChanceNode(DecisionNode *parent, const Board &board, const int action,
                        const int cumulate_score, const bool future, const bool working,
                        const int max_reserve)
@@ -183,6 +200,10 @@ ChanceNode::ChanceNode(DecisionNode *parent, const Board &board, const int actio
         }
     }
     this->fprop.max_reserve = std::min(fprop.max_reserve, this->max_children);
+#ifdef DEBUG2
+    if (this->parent != nullptr)
+        std::cerr << "[ID] " << this->id  << " parent " << this->parent->id << std::endl;
+#endif
 }
 
 double ChanceNode::uct_value(const double explore_c, const bool is_worker) const
@@ -306,6 +327,9 @@ public:
     void run_main();
     void run_worker(Env2048 &env, std::shared_ptr<Task> task);
     int get_best_action() const;
+    void terminate() {
+        this->pool.stop_all();
+    }
 
 private:
     Env2048 main_env;
@@ -381,8 +405,6 @@ void MCTS::enqueue_task_main(MCTSNode *futureRoot, const bool is_chance)
 {
     if (futureRoot->fprop.worker_finished.load() == true)
         return;
-
-    futureRoot->non_entered.store(false);
     
     std::shared_ptr<Task> task = std::make_shared<Task>(futureRoot, is_chance);
     std::unique_lock<std::mutex> lock(futureRoot->fprop.mutex);
@@ -406,6 +428,7 @@ DecisionNode *MCTS::get_next_main(MCTSNode *futureRoot, const bool is_chance)
         std::unique_lock<std::mutex> lock(futureRoot->fprop.mutex);
         if (futureRoot->fprop.next_step != nullptr) {
             // Use next step
+            assert(futureRoot->fprop.cur_reserve > 0);
 #ifdef DEBUG
             std::cerr << "Main use next step" << std::endl;
 #endif
@@ -414,29 +437,48 @@ DecisionNode *MCTS::get_next_main(MCTSNode *futureRoot, const bool is_chance)
             next->fprop.next_step = nullptr;
             next->fprop.future = true;
             futureRoot->fprop.cur_reserve--;
+#ifdef DEBUG2
+            assert(futureRoot != nullptr);
+            std::cerr << "[ID] " << futureRoot->id
+                << " use next step " << next->id
+                << ", reserve: " << futureRoot->fprop.cur_reserve << std::endl;
+            if (futureRoot->fprop.next_step != nullptr) {
+                std::cerr << "[ID] " << futureRoot->id
+                    << " new next step" << futureRoot->fprop.next_step->id << std::endl;
+            }
+#endif
             if (this->stop_working_main(futureRoot)
             || futureRoot->fprop.pending_task != nullptr
             || futureRoot->fprop.worker_processing.load() == true)
                 return next;
             lock.unlock();
-            // Work not finished and pending and worker not processing, enqueue
+            // Work not finished and not pending and worker not processing, enqueue
             this->enqueue_task_main(futureRoot, is_chance);
             return next;
         }
+        if (futureRoot->fprop.worker_processing.load()) {
+            lock.unlock();
+            // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
         if (futureRoot->fprop.pending_task == nullptr) {
-#ifdef DEBUG
-            // std::cerr << "Main spinning" << std::endl;
-            if (futureRoot->non_entered.load())
-                std::cerr << "Non entered" << std::endl;
-#endif
             // TODO cv?
             // next is null, and worker is working on it, spin until worker finished
+            if (futureRoot->fully_expanded_future()) {
+                futureRoot->fprop.worker_finished.store(true);
+                futureRoot->fprop.working = false;
+                return nullptr;
+            }
+            std::cerr << "Hi" << std::endl;
+            exit(1);
             lock.unlock();
             continue;
         }
         // No next step and pending in queue
+        // TODO uncomment
         futureRoot->fprop.pending_task->cancel = true;
         lock.unlock();
+        // std::this_thread::sleep_for(std::chrono::milliseconds(100));
         break;
     }
 #ifdef DEBUG
@@ -460,9 +502,11 @@ void MCTS::post_next_main(MCTSNode *futureRoot, const bool is_chance)
 #ifdef DEBUG
     std::cerr << "In post next main" << std::endl;
 #endif
-    if (!futureRoot->fprop.worker_finished.load()) {
+    // if (!futureRoot->fprop.worker_finished.load()) {
+    //     return;
+    // }
+    if (futureRoot->fprop.working)
         return;
-    }
     // Set working for child that
     // (1) Non-fully_expanded child (add to queue)
     // or
@@ -505,8 +549,10 @@ DecisionNode *MCTS::select_and_expand_main(MCTSNode * &futureRoot)
         if (cursorC->fprop.working) {
             cursorD = this->get_next_main(cursorC, true);
             this->post_next_main(cursorC, true);
-            futureRoot = cursorC;
-            return cursorD;
+            if (cursorD != nullptr) {
+                futureRoot = cursorC;
+                return cursorD;
+            }
         }
         bool expanded;  // Dummy, useless for main thread
         cursorD = cursorC->select_child(this->main_env, expanded, false);
@@ -515,7 +561,7 @@ DecisionNode *MCTS::select_and_expand_main(MCTSNode * &futureRoot)
     if (cursorD->game_over)
         return cursorD;
 
-    // Do cursorD need to expand all child by worker? yes
+    // Does cursorD need to expand all child by worker? yes
     // cursorD is working
     DecisionNode *ret = this->get_next_main(cursorD, false);
     this->post_next_main(cursorD, false);
@@ -524,15 +570,15 @@ DecisionNode *MCTS::select_and_expand_main(MCTSNode * &futureRoot)
 
 DecisionNode *MCTS::expand_workerD(Env2048 &env, DecisionNode *root)
 {
-#ifdef DEBUG
-    std::cerr << "In expand workerD" << std::endl;
+#ifdef DEBUG2
+    std::cerr << "[DEBUG] " << root->id << " In expand workerD" << std::endl;
 #endif
     // Root is where to expand, since stop working once fully expanded
     if (root->untried_actions.size() == 0) {
         std::cerr << "[BAD] select_and_expand_workerD only accept non-fully expanded root" << std::endl;
         exit(1);
     }
-    if (root->game_over)
+    if (root->game_over)  // TODO remove this
         return root;
     std::uniform_int_distribution<> dis(0, root->untried_actions.size() - 1);
     const int action_idx = dis(this->rng);
@@ -541,8 +587,8 @@ DecisionNode *MCTS::expand_workerD(Env2048 &env, DecisionNode *root)
 
 DecisionNode *MCTS::expand_workerC(Env2048 &env, ChanceNode *root)
 {
-#ifdef DEBUG
-    std::cerr << "In expand workerC" << std::endl;
+#ifdef DEBUG2
+    std::cerr << "[DEBUG] " << root->id << " In expand workerC" << std::endl;
 #endif
     // Starting from root, may need to select down the tree if select result in a old child
     bool expanded = false;
@@ -597,6 +643,9 @@ void MCTS::backpropagate_worker(MCTSNode *futureRoot, DecisionNode *leaf, double
     double min_avg = std::numeric_limits<double>::infinity(),
            max_avg = -std::numeric_limits<double>::infinity();
     // Only back propagate until future root
+#ifdef DEBUG
+    std::cerr << "In back worker" << std::endl;
+#endif
     while (cursor != nullptr && cursor != futureRoot) {
         cursor->fprop.stats.update_reward(reward, min_avg, max_avg);
         cursor = cursor->get_parent();
@@ -607,7 +656,12 @@ void MCTS::run_main()
 {
     MCTSNode *futureRoot = nullptr;
     DecisionNode *leaf = this->select_and_expand_main(futureRoot);
+    if (leaf == nullptr) {
+        std::cerr << "[BAD] nullptr" << std::endl;
+        return;
+    }
     if (!leaf->fprop.future) {
+        // Sequential expanded by main
         leaf->fprop.reward = this->rollout_worker(this->main_env, leaf);
         this->backpropagate_worker(futureRoot, leaf, leaf->fprop.reward);
     }
@@ -619,8 +673,8 @@ void MCTS::run_worker(Env2048 &env, std::shared_ptr<Task> task)
     MCTSNode *futureRoot = task->futureRoot;
     // Lock until next isn't null
     std::unique_lock<std::mutex> lock(futureRoot->fprop.mutex);
-#ifdef DEBUG
-    std::cerr << TID << "[DEBUG] In run worker: " << std::endl;
+#ifdef DEBUG2
+    std::cerr << "[DEBUG] " << futureRoot->id << " In run worker: " << std::endl;
 #endif
     if (task->cancel || futureRoot->fprop.worker_finished.load())
         return;
@@ -628,10 +682,7 @@ void MCTS::run_worker(Env2048 &env, std::shared_ptr<Task> task)
     futureRoot->fprop.worker_processing.store(true);
     assert(futureRoot->fprop.pending_task != nullptr);
     futureRoot->fprop.pending_task->cancel = true;
-    futureRoot->fprop.pending_task = nullptr;  // TODO causing spin
-
-
-    // futureRoot->non_entered.store(true); // TODO remove
+    futureRoot->fprop.pending_task = nullptr;
 
     bool null_next = false;
     if (futureRoot->fprop.next_step != nullptr)
@@ -640,8 +691,9 @@ void MCTS::run_worker(Env2048 &env, std::shared_ptr<Task> task)
         null_next = true;
 
     while (!futureRoot->fully_expanded_future() && (null_next || futureRoot->fprop.remain_work())) {
-#ifdef DEBUG
-        std::cerr << TID << " In while" << std::endl;
+    // while (!futureRoot->fully_expanded_future()) {
+#ifdef DEBUG2
+        std::cerr << "[DEBUG] " << futureRoot->id << " In while" << std::endl;
 #endif
         DecisionNode *leaf = nullptr;
         if (task->is_chance) {
@@ -653,32 +705,51 @@ void MCTS::run_worker(Env2048 &env, std::shared_ptr<Task> task)
         this->backpropagate_worker(futureRoot, leaf, leaf->fprop.reward);
 
         if (null_next) {
-            futureRoot->fprop.next_step = leaf;
+            futureRoot->fprop.next_step = leaf;  // TODO cv?
             assert(futureRoot->fprop.next_step != nullptr);
+            futureRoot->fprop.cur_reserve++;
+#ifdef DEBUG2
+            std::cerr << "[ID] " << futureRoot->id
+                << " add next step " << futureRoot->fprop.next_step->id
+                << " from null, reserve: " << futureRoot->fprop.cur_reserve << std::endl;
+#endif
             lock.unlock();
             null_next = false;
         } else {
             lock.lock();
-            DecisionNode * &next_ref = futureRoot->fprop.next_step;
-            while (next_ref != nullptr && next_ref->fprop.next_step != nullptr) {
-                next_ref = next_ref->fprop.next_step;
+            DecisionNode *next_ptr = futureRoot->fprop.next_step;
+            while (next_ptr != nullptr && next_ptr->fprop.next_step != nullptr) {
+                next_ptr = next_ptr->fprop.next_step;
             }
-            if (next_ref == nullptr)
-                next_ref = leaf;  // TODO cv?
-            else
-                next_ref->fprop.next_step = leaf;
             futureRoot->fprop.cur_reserve++;
+            if (next_ptr == nullptr) {
+                futureRoot->fprop.next_step = leaf;  // TODO cv?
+#ifdef DEBUG2
+                std::cerr << "[ID] " << futureRoot->id
+                    << " add next step " << leaf->id
+                    << " for root, reserve: " << futureRoot->fprop.cur_reserve << std::endl;
+#endif
+            }
+            else {
+                next_ptr->fprop.next_step = leaf;
+#ifdef DEBUG2
+                std::cerr << "[ID] " << futureRoot->id
+                    << " add next step " << leaf->id
+                    << " for " << next_ptr->id
+                    << ", reserve: " << futureRoot->fprop.cur_reserve << std::endl;
+#endif
+            }
             lock.unlock();
         }
     }
-    if (null_next) {
-        assert(1 == 0);
-        lock.unlock();
-    }
-    futureRoot->fprop.worker_processing.store(false);
     if (futureRoot->fully_expanded_future()) {
         futureRoot->fprop.worker_finished.store(true);
     }
+    if (null_next) {
+        assert(null_next == false);
+        lock.unlock();
+    }
+    futureRoot->fprop.worker_processing.store(false);
 }
 
 int MCTS::get_best_action() const
@@ -705,7 +776,7 @@ ThreadPool::ThreadPool(MCTS &mcts, const unsigned int num_threads)
                 {
                     std::unique_lock<std::mutex> lock(this->queue_mutex);
 #ifdef DEBUG
-                    std::cerr << TID << " Waiting" << std::endl;
+                    std::cerr << "[WORKER]" << " Waiting" << std::endl;
 #endif
                     this->queue_cv.wait(lock, [this] {
                         return (!this->tasks.empty() || this->stop);
@@ -714,7 +785,7 @@ ThreadPool::ThreadPool(MCTS &mcts, const unsigned int num_threads)
                         return;
                     if (!this->tasks.empty()) {
 #ifdef DEBUG
-                        std::cerr << TID << " Get task" << std::endl;
+                        std::cerr << "[WORKER]" << " Get task" << std::endl;
 #endif
                         task = this->tasks.front();
                         this->tasks.pop_front();
@@ -740,11 +811,6 @@ void ThreadPool::stop_all()
     }
 }
 
-ThreadPool::~ThreadPool()
-{
-    this->stop_all();
-}
-
 void ThreadPool::enqueue(std::shared_ptr<Task> task)
 {
     {
@@ -760,6 +826,9 @@ int mcts_action(const Board &board, const NTupleTD &agent,
                 const double exploration_constant,
                 const int iterations, const int rollout_depth)
 {
+#ifdef DEBUG2
+    GLOBAL_ID.store(0);
+#endif
     MCTS mcts(board, agent, num_threads, exploration_constant, rollout_depth);
     for (int it = 0; it < iterations; it++) {
 #ifdef DEBUG
@@ -767,5 +836,6 @@ int mcts_action(const Board &board, const NTupleTD &agent,
 #endif
         mcts.run_main();
     }
+    mcts.terminate();
     return mcts.get_best_action();
 }
