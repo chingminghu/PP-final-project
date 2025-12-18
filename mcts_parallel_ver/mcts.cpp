@@ -8,7 +8,6 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
-#include <cassert>
 #include "mcts.hpp"
 #include "../env/2048env.hpp"
 #include "../TD_learning_sequential_ver/n_tuple_TD.hpp"
@@ -434,7 +433,6 @@ DecisionNode *MCTS::get_next_main(MCTSNode *futureRoot, const bool is_chance)
 #endif
         if (futureRoot->fprop.next_step != nullptr) {
             // Use next step
-            assert(futureRoot->fprop.cur_reserve > 0);
 #ifdef DEBUG
             std::cerr << "Main use next step" << std::endl;
 #endif
@@ -495,7 +493,8 @@ DecisionNode *MCTS::get_next_main(MCTSNode *futureRoot, const bool is_chance)
 #endif
     DecisionNode *ret = (is_chance)? this->expand_workerC(this->main_env, static_cast<ChanceNode *>(futureRoot))
                                    : this->expand_workerD(this->main_env, static_cast<DecisionNode *>(futureRoot));
-    ret->fprop.future = false;
+    if (ret != nullptr)
+        ret->fprop.future = false;
     std::unique_lock<std::mutex> lock(futureRoot->fprop.mutex);
     if (futureRoot->fully_expanded_future())
         futureRoot->fprop.worker_finished.store(true);
@@ -608,6 +607,9 @@ DecisionNode *MCTS::expand_workerC(Env2048 &env, ChanceNode *root)
     DecisionNode *cursorD = root->select_child(env, expanded, true);
     while (!cursorD->game_over && !expanded && cursorD->untried_actions.size() == 0) {
         ChanceNode *cursorC = cursorD->select_child(this->explore_c, true);
+        if (cursorC == nullptr) {
+            return nullptr;
+        }
         expanded = false;
         cursorD = cursorC->select_child(env, expanded, true);
     }
@@ -696,7 +698,6 @@ void MCTS::run_worker(Env2048 &env, std::shared_ptr<Task> task)
         return;
     // futureRoot working should be true, future should be false
     futureRoot->fprop.worker_processing.store(true);
-    assert(futureRoot->fprop.pending_task != nullptr);
     futureRoot->fprop.pending_task->cancel = true;
     futureRoot->fprop.pending_task = nullptr;
 
@@ -717,6 +718,8 @@ void MCTS::run_worker(Env2048 &env, std::shared_ptr<Task> task)
         } else {
             leaf = this->expand_workerD(env, static_cast<DecisionNode *>(futureRoot));
         }
+        if (leaf == nullptr)
+            continue;
         leaf->fprop.reward = this->rollout_worker(env, leaf);
         this->backpropagate_worker(futureRoot, leaf, leaf->fprop.reward);
         if (leaf->game_over) {
@@ -725,7 +728,6 @@ void MCTS::run_worker(Env2048 &env, std::shared_ptr<Task> task)
 
         if (null_next) {
             futureRoot->fprop.next_step = leaf;  // TODO cv?
-            assert(futureRoot->fprop.next_step != nullptr);
             futureRoot->fprop.cur_reserve++;
 #ifdef DEBUG2
             std::cerr << "[ID] " << futureRoot->id
@@ -769,7 +771,6 @@ void MCTS::run_worker(Env2048 &env, std::shared_ptr<Task> task)
         futureRoot->fprop.worker_finished.store(true);
     }
     if (null_next) {
-        // assert(null_next == false);
         lock.unlock();
     }
     futureRoot->fprop.worker_processing.store(false);
