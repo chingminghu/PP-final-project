@@ -2,6 +2,7 @@
 #include "n_tuple_TD.hpp"
 #include "expectimax_search.hpp"
 #include <iostream>
+#include <chrono>
 
 int main(void)
 {
@@ -21,8 +22,18 @@ int main(void)
     env.reset();
     
     agent.load_weights("2048_weights.pkl");
+    std::chrono::duration<double, std::milli> duration;
+    double total_duration;
+    int n_step = 0;
     while(true) {
+        auto start = std::chrono::high_resolution_clock::now();
         int action = Expectimax(env.get_board(), agent, 5, 20);
+        auto end = std::chrono::high_resolution_clock::now();
+        duration = end - start;
+        if(n_step < 100){
+            total_duration += duration.count();
+        }
+        n_step += 1;
 
         env.step(action);
         env.print_board();
@@ -32,4 +43,5 @@ int main(void)
             break;
         }
     }
+    std::cout << "The average time spent for steps is " << total_duration / 100 << std::endl; 
 }
