@@ -17,6 +17,7 @@ int main()
         {{0, 0}, {0, 1}, {1, 1}, {2, 0}, {2, 1}, {3, 1}},
         {{0, 0}, {0, 1}, {0, 2}, {1, 0}, {1, 2}, {2, 2}}
     };
+    std::cout << std::setprecision(4);
 
     NTupleTD agent(patterns);
     agent.load_weights("2048_weights.pkl");
@@ -26,8 +27,7 @@ int main()
     unsigned long long total_time = 0, total_step = 0, time_100 = 0;
     while (!done) {
         std::chrono::steady_clock::time_point t_begin = std::chrono::steady_clock::now();
-        const int action = mcts_action(env.get_board(), agent, 1.41, 4096, 5);
-        // const int action = agent.choose_action(env);
+        const int action = mcts_action(env.get_board(), agent, 16, 1.41, 4096, 5);
         std::chrono::steady_clock::time_point t_end = std::chrono::steady_clock::now();
         unsigned long long duration = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_begin).count();
         total_time += duration;
